@@ -1,0 +1,66 @@
+From 2f0b7aa579b878ef9f65572b5d29e6e13f8317c1 Mon Sep 17 00:00:00 2001
+From: root <root@ltcrain80-lp7.aus.stglabs.ibm.com>
+Date: Mon, 6 May 2024 04:07:21 -0500
+Subject: [PATCH] powerpc/pseries: Expose PKS interface based on the SB_VERSION
+ value
+
+SB_VERSION is set to 1 on enabling the signed updates in case of dynamic
+secure boot scenario. Expose the PKS interface to the user if the
+SB_VERSION exists and hide it for other cases where it is not required and
+will result in hcall related errors if used.
+
+Signed-off-by: root <root@ltcrain80-lp7.aus.stglabs.ibm.com>
+---
+ arch/powerpc/platforms/pseries/plpks.c | 22 +++++++++++++++++++++-
+ 1 file changed, 21 insertions(+), 1 deletion(-)
+
+diff --git a/arch/powerpc/platforms/pseries/plpks.c b/arch/powerpc/platforms/pseries/plpks.c
+index febe18f251d0..721beb45951d 100644
+--- a/arch/powerpc/platforms/pseries/plpks.c
++++ b/arch/powerpc/platforms/pseries/plpks.c
+@@ -126,6 +126,22 @@ static int pseries_status_to_err(int rc)
+ 	return err;
+ }
+ 
++static int plpks_get_sb_version(void)
++{
++	struct plpks_var var = {0};
++	u8 version;
++
++	var.component = NULL;
++	// Only the signed variables have null bytes in their names, this one doesn't
++	var.name = "SB_VERSION";
++	var.namelen = strlen(var.name);
++	var.datalen = 1;
++	var.data = &version;
++
++	// Unlike the other vars, SB_VERSION is owned by firmware instead of the OS
++	return plpks_read_fw_var(&var);	
++}
++
+ static int plpks_gen_password(void)
+ {
+ 	unsigned long retbuf[PLPAR_HCALL_BUFSIZE] = { 0 };
+@@ -381,6 +397,10 @@ bool plpks_is_available(void)
+ 	if (!firmware_has_feature(FW_FEATURE_PLPKS))
+ 		return false;
+ 
++	rc = plpks_get_sb_version();
++	if (rc) 
++		return false;
++	 		
+ 	rc = _plpks_get_config();
+ 	if (rc)
+ 		return false;
+@@ -698,7 +718,7 @@ static __init int pseries_plpks_init(void)
+ 	if (rc) {
+ 		pr_err("POWER LPAR Platform KeyStore is not supported or enabled\n");
+ 		return rc;
+-	}
++	}		
+ 
+ 	rc = plpks_gen_password();
+ 	if (rc)
+-- 
+2.39.1
+
